@@ -22,6 +22,9 @@ export const Home = () => {
             id="minutesAmount"
             type="number"
             placeholder="00"
+            max={60}
+            min={5}
+            
           />
           <span>minutos.</span>
         </FormContainer>
