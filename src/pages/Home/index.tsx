@@ -1,6 +1,7 @@
-import { FieldValues, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as zod from "zod";
+import { v4 as uuidv4 } from "uuid";
 
 import { Play } from "phosphor-react";
 import {
@@ -12,6 +13,7 @@ import {
   StartCountDown,
   TaskInput,
 } from "./styles";
+import { useState } from "react";
 
 // Formulários
 
@@ -24,39 +26,58 @@ import {
 
 const newCycleFormSchema = zod.object({
   task: zod.string().min(1, "Informe a tarefa"),
-  minutes: zod
+  minutesAmount: zod
     .number()
     .min(5, "O ciclo precisa ser de, no mínimo, 5 minutos")
     .max(60, "O ciclo precisa ser de até 60 minutos"),
 });
 
-// interface newCycleFormData {
-//   task: string;
-//   minutes: number;
-// }
-
+// usar typeof quando for fazer referência a um objeto javascript,
+// pois é a única forma do typescript entender
 type NewCycleFormData = zod.infer<typeof newCycleFormSchema>;
 
+interface ICycle {
+  id: string;
+  task: string;
+  minutesAmount: number;
+}
+
 export const Home = () => {
+  const [cycles, setCycles] = useState<ICycle[]>([]);
+
+  // estado para controlar qual ciclo está ativo
+  const [actualCycle, setActualCycle] = useState<string | null>(null);
+
   const { register, handleSubmit, watch, reset } = useForm<NewCycleFormData>({
     resolver: zodResolver(newCycleFormSchema),
-    // defaultValues: {
-    //   task: "",
-    //   minutes: 0,
-    // },
   });
 
-  const onHandleSubmit = (data: NewCycleFormData) => {
-    console.log(data);
+  const handleCreateCycle = (data: NewCycleFormData) => {
+    const newCycle: ICycle = {
+      id: uuidv4(),
+      task: data.task,
+      minutesAmount: data.minutesAmount,
+    };
+
+    //  **IMPORTANTE**
+    // quando a atualização de um estado depende do valor anterior
+    // utilizar essa forma de setar o novo valor
+    setCycles((state) => [...state, newCycle]);
+    setActualCycle(newCycle.id);
+
     reset();
   };
+
+  // percorremos os ciclos e procuramos pelo ciclo ativo
+  const activeCycle = cycles.find((cycle) => cycle.id === actualCycle);
+  console.log("activeCycle ", activeCycle);
 
   const task = watch("task");
   const isSubmitDisabled = !task;
 
   return (
     <HomeContainer>
-      <form onSubmit={handleSubmit(onHandleSubmit)}>
+      <form onSubmit={handleSubmit(handleCreateCycle)}>
         <FormContainer>
           <label htmlFor="task">Vou trabalhar em</label>
           <TaskInput
@@ -72,7 +93,7 @@ export const Home = () => {
             placeholder="00"
             min={5}
             max={60}
-            {...register("minutes", { valueAsNumber: true })}
+            {...register("minutesAmount", { valueAsNumber: true })}
           />
           <span>minutos.</span>
         </FormContainer>
