@@ -1,30 +1,30 @@
-import { useForm } from "react-hook-form";
+import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as zod from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { differenceInSeconds } from "date-fns";
 
 import { HandPalm, Play } from "phosphor-react";
-import {
-  CountDownContainer,
-  FormContainer,
-  HomeContainer,
-  MinutesAmountInput,
-  Separator,
-  StartCountDown,
-  StopCountDown,
-  TaskInput,
-} from "./styles";
-import { useEffect, useState } from "react";
+import { HomeContainer, StartCountDown, StopCountDown } from "./styles";
+import { createContext, useEffect, useState } from "react";
+import { NewCycleForm } from "./components/NewCycleForm";
+import { Countdown } from "./components/Countdown";
 
-// Formulários
+interface ICycle {
+  id: string;
+  task: string;
+  minutesAmount: number;
+  startDate: Date;
+  interruptedDate?: Date;
+  finishedData?: Date;
+}
 
-// Controlled - manter em tempo real o valor inserido no estado do componente
-// é a forma padrão, e não errada, de pegar valores do input (aquele esquema de useState, onChange nos inputs, etc)
-// O problema deste método é que, quando um componente é atualizado/modificado, todos os componentes serão re-renderizados
-// causando uma queda de performance (quando se trata de um projeto muito grande, com muitos componentes)
-
-// Uncontrolled - bibliotecas externas como: react-hook-form
+interface CyclesContextData {
+  activeCycle: ICycle | undefined;
+  actualCycleId: string | null;
+  amountSeconds: number;
+  markCurrentCycleAsFinished: () => void;
+  setSecondsPassed: (seconds: number) => void;
+}
 
 const newCycleFormSchema = zod.object({
   task: zod.string().min(1, "Informe a tarefa"),
@@ -38,62 +38,41 @@ const newCycleFormSchema = zod.object({
 // pois é a única forma do typescript entender
 type NewCycleFormData = zod.infer<typeof newCycleFormSchema>;
 
-interface ICycle {
-  id: string;
-  task: string;
-  minutesAmount: number;
-  startDate: Date;
-  interruptedDate?: Date;
-  finishedData?: Date;
-}
+export const CyclesContext = createContext({} as CyclesContextData);
 
 export const Home = () => {
   const [cycles, setCycles] = useState<ICycle[]>([]);
-  console.log("cycles ", cycles);
-
   // estado para controlar qual ciclo está ativo
   const [actualCycleId, setActualCycleId] = useState<string | null>(null);
-
   const [amountSeconds, setAmountSeconds] = useState(0);
 
-  const { register, handleSubmit, watch, reset } = useForm<NewCycleFormData>({
+  const newCycleForm = useForm<NewCycleFormData>({
     resolver: zodResolver(newCycleFormSchema),
+    defaultValues: {
+      task: "",
+      minutesAmount: 0,
+    },
   });
-  // percorremos os ciclos e procuramos pelo ciclo ativo, se houver
+
+  const { handleSubmit, watch, reset } = newCycleForm;
+
   const activeCycle = cycles.find((cycle) => cycle.id === actualCycleId);
-  const totalSeconds = activeCycle ? activeCycle.minutesAmount * 60 : 0;
 
-  useEffect(() => {
-    let interval: NodeJS.Timer;
-
-    if (activeCycle) {
-      interval = setInterval(() => {
-        const diff = differenceInSeconds(new Date(), activeCycle.startDate);
-
-        if (diff >= totalSeconds) {
-          setCycles((state) =>
-            state.map((cycle) => {
-              if (cycle.id === actualCycleId) {
-                return { ...cycle, finishedData: new Date() };
-              } else {
-                return cycle;
-              }
-            })
-          );
-          setAmountSeconds(totalSeconds);
-          clearInterval(interval);
+  const markCurrentCycleAsFinished = () => {
+    setCycles((state) =>
+      state.map((cycle) => {
+        if (cycle.id === actualCycleId) {
+          return { ...cycle, finishedData: new Date() };
         } else {
-          setAmountSeconds(diff);
+          return cycle;
         }
-      }, 1000);
-    }
+      })
+    );
+  };
 
-    // quando o useEffect ser executado de novo por causa de uma alteração no estado
-    // esse return vai "resetar" os dados e resolver o bug de interpolar os valores anteriores
-    return () => {
-      clearInterval(interval);
-    };
-  }, [activeCycle, totalSeconds]);
+  const setSecondsPassed = (seconds: number) => {
+    setAmountSeconds(seconds);
+  };
 
   const handleCreateCycle = (data: NewCycleFormData) => {
     const newCycle: ICycle = {
@@ -132,57 +111,26 @@ export const Home = () => {
     setActualCycleId(null);
   };
 
-  // aqui convertemos os minutos inseridos no input por segundos
-  const currentSeconds = activeCycle ? totalSeconds - amountSeconds : 0;
-
-  const minutesAmount = Math.floor(currentSeconds / 60);
-  const secondsAmount = currentSeconds % 60;
-
-  // padStart - função
-  const minutes = String(minutesAmount).padStart(2, "0");
-  const seconds = String(secondsAmount).padStart(2, "0");
-
-  useEffect(() => {
-    if (activeCycle) {
-      document.title = `${minutes}:${seconds}`;
-    }
-  }, [minutes, seconds]);
-
   const task = watch("task");
   const isSubmitDisabled = !task;
 
   return (
     <HomeContainer>
       <form onSubmit={handleSubmit(handleCreateCycle)}>
-        <FormContainer>
-          <label htmlFor="task">Vou trabalhar em</label>
-          <TaskInput
-            id="task"
-            placeholder="Dê um nome para o seu projeto"
-            disabled={!!activeCycle}
-            {...register("task")}
-          />
-
-          <label htmlFor="minutesAmount">durante</label>
-          <MinutesAmountInput
-            id="minutesAmount"
-            disabled={!!activeCycle}
-            type="number"
-            placeholder="00"
-            // min={5}
-            max={60}
-            {...register("minutesAmount", { valueAsNumber: true })}
-          />
-          <span>minutos.</span>
-        </FormContainer>
-
-        <CountDownContainer>
-          <span>{minutes[0]}</span>
-          <span>{minutes[1]}</span>
-          <Separator>:</Separator>
-          <span>{seconds[0]}</span>
-          <span>{seconds[1]}</span>
-        </CountDownContainer>
+        <CyclesContext.Provider
+          value={{
+            activeCycle,
+            actualCycleId,
+            amountSeconds,
+            markCurrentCycleAsFinished,
+            setSecondsPassed,
+          }}
+        >
+          <FormProvider {...newCycleForm}>
+            <NewCycleForm />
+          </FormProvider>
+          <Countdown />
+        </CyclesContext.Provider>
 
         {activeCycle ? (
           <StopCountDown type="button" onClick={handleStopCycle}>
