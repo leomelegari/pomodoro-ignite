@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as zod from "zod";
 import { v4 as uuidv4 } from "uuid";
+import { differenceInSeconds } from "date-fns";
 
 import { Play } from "phosphor-react";
 import {
@@ -13,7 +14,7 @@ import {
   StartCountDown,
   TaskInput,
 } from "./styles";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // Formulários
 
@@ -40,6 +41,7 @@ interface ICycle {
   id: string;
   task: string;
   minutesAmount: number;
+  startDate: Date;
 }
 
 export const Home = () => {
@@ -48,15 +50,38 @@ export const Home = () => {
   // estado para controlar qual ciclo está ativo
   const [actualCycle, setActualCycle] = useState<string | null>(null);
 
+  const [amountSeconds, setAmountSeconds] = useState(0);
+
   const { register, handleSubmit, watch, reset } = useForm<NewCycleFormData>({
     resolver: zodResolver(newCycleFormSchema),
   });
+  // percorremos os ciclos e procuramos pelo ciclo ativo, se houver
+  const activeCycle = cycles.find((cycle) => cycle.id === actualCycle);
+
+  useEffect(() => {
+    let interval: NodeJS.Timer;
+
+    if (activeCycle) {
+      interval = setInterval(() => {
+        setAmountSeconds(
+          differenceInSeconds(new Date(), activeCycle.startDate)
+        );
+      }, 1000);
+    }
+
+    // quando o useEffect ser executado de novo por causa de uma alteração no estado
+    // esse return vai "resetar" os dados e resolver o bug de interpolar os valores anteriores
+    return () => {
+      clearInterval(interval);
+    };
+  }, [activeCycle]);
 
   const handleCreateCycle = (data: NewCycleFormData) => {
     const newCycle: ICycle = {
       id: uuidv4(),
       task: data.task,
       minutesAmount: data.minutesAmount,
+      startDate: new Date(),
     };
 
     //  **IMPORTANTE**
@@ -64,13 +89,27 @@ export const Home = () => {
     // utilizar essa forma de setar o novo valor
     setCycles((state) => [...state, newCycle]);
     setActualCycle(newCycle.id);
+    setAmountSeconds(0);
 
     reset();
   };
 
-  // percorremos os ciclos e procuramos pelo ciclo ativo
-  const activeCycle = cycles.find((cycle) => cycle.id === actualCycle);
-  console.log("activeCycle ", activeCycle);
+  // aqui convertemos os minutos inseridos no input por segundos
+  const minutesToSeconds = activeCycle ? activeCycle.minutesAmount * 60 : 0;
+  const currentSeconds = activeCycle ? minutesToSeconds - amountSeconds : 0;
+
+  const minutesAmount = Math.floor(currentSeconds / 60);
+  const secondsAmount = currentSeconds % 60;
+
+  // padStart - função
+  const minutes = String(minutesAmount).padStart(2, "0");
+  const seconds = String(secondsAmount).padStart(2, "0");
+
+  useEffect(() => {
+    if (activeCycle) {
+      document.title = `${minutes}:${seconds}`;
+    }
+  }, [minutes, seconds]);
 
   const task = watch("task");
   const isSubmitDisabled = !task;
@@ -99,11 +138,11 @@ export const Home = () => {
         </FormContainer>
 
         <CountDownContainer>
-          <span>0</span>
-          <span>0</span>
+          <span>{minutes[0]}</span>
+          <span>{minutes[1]}</span>
           <Separator>:</Separator>
-          <span>0</span>
-          <span>0</span>
+          <span>{seconds[0]}</span>
+          <span>{seconds[1]}</span>
         </CountDownContainer>
 
         <StartCountDown disabled={isSubmitDisabled} type="submit">
