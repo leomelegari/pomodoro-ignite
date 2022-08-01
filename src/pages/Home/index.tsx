@@ -4,7 +4,7 @@ import * as zod from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { differenceInSeconds } from "date-fns";
 
-import { Play } from "phosphor-react";
+import { HandPalm, Play } from "phosphor-react";
 import {
   CountDownContainer,
   FormContainer,
@@ -12,6 +12,7 @@ import {
   MinutesAmountInput,
   Separator,
   StartCountDown,
+  StopCountDown,
   TaskInput,
 } from "./styles";
 import { useEffect, useState } from "react";
@@ -29,7 +30,7 @@ const newCycleFormSchema = zod.object({
   task: zod.string().min(1, "Informe a tarefa"),
   minutesAmount: zod
     .number()
-    .min(5, "O ciclo precisa ser de, no mínimo, 5 minutos")
+    .min(1, "O ciclo precisa ser de, no mínimo, 5 minutos")
     .max(60, "O ciclo precisa ser de até 60 minutos"),
 });
 
@@ -42,13 +43,16 @@ interface ICycle {
   task: string;
   minutesAmount: number;
   startDate: Date;
+  interruptedDate?: Date;
+  finishedData?: Date;
 }
 
 export const Home = () => {
   const [cycles, setCycles] = useState<ICycle[]>([]);
+  console.log("cycles ", cycles);
 
   // estado para controlar qual ciclo está ativo
-  const [actualCycle, setActualCycle] = useState<string | null>(null);
+  const [actualCycleId, setActualCycleId] = useState<string | null>(null);
 
   const [amountSeconds, setAmountSeconds] = useState(0);
 
@@ -56,16 +60,31 @@ export const Home = () => {
     resolver: zodResolver(newCycleFormSchema),
   });
   // percorremos os ciclos e procuramos pelo ciclo ativo, se houver
-  const activeCycle = cycles.find((cycle) => cycle.id === actualCycle);
+  const activeCycle = cycles.find((cycle) => cycle.id === actualCycleId);
+  const totalSeconds = activeCycle ? activeCycle.minutesAmount * 60 : 0;
 
   useEffect(() => {
     let interval: NodeJS.Timer;
 
     if (activeCycle) {
       interval = setInterval(() => {
-        setAmountSeconds(
-          differenceInSeconds(new Date(), activeCycle.startDate)
-        );
+        const diff = differenceInSeconds(new Date(), activeCycle.startDate);
+
+        if (diff >= totalSeconds) {
+          setCycles((state) =>
+            state.map((cycle) => {
+              if (cycle.id === actualCycleId) {
+                return { ...cycle, finishedData: new Date() };
+              } else {
+                return cycle;
+              }
+            })
+          );
+          setAmountSeconds(totalSeconds);
+          clearInterval(interval);
+        } else {
+          setAmountSeconds(diff);
+        }
       }, 1000);
     }
 
@@ -74,7 +93,7 @@ export const Home = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [activeCycle]);
+  }, [activeCycle, totalSeconds]);
 
   const handleCreateCycle = (data: NewCycleFormData) => {
     const newCycle: ICycle = {
@@ -88,15 +107,33 @@ export const Home = () => {
     // quando a atualização de um estado depende do valor anterior
     // utilizar essa forma de setar o novo valor
     setCycles((state) => [...state, newCycle]);
-    setActualCycle(newCycle.id);
+    setActualCycleId(newCycle.id);
     setAmountSeconds(0);
 
     reset();
   };
 
+  const handleStopCycle = () => {
+    setCycles((state) =>
+      // para alterar um valor de uma chave específica,
+      // precisamos percorrer o objeto todo até encontrar qual
+      // chave queremos alterar
+      state.map((cycle) => {
+        // aqui entro no ciclo ativo, comparando os ids
+        if (cycle.id === actualCycleId) {
+          // aqui setei o valor da chave em específico no ciclo com id correspondente
+          return { ...cycle, interruptedDate: new Date() };
+        } else {
+          // aqui retorno os demais ciclos já inseridos no estado anteriormente, sem alterá-los
+          return cycle;
+        }
+      })
+    );
+    setActualCycleId(null);
+  };
+
   // aqui convertemos os minutos inseridos no input por segundos
-  const minutesToSeconds = activeCycle ? activeCycle.minutesAmount * 60 : 0;
-  const currentSeconds = activeCycle ? minutesToSeconds - amountSeconds : 0;
+  const currentSeconds = activeCycle ? totalSeconds - amountSeconds : 0;
 
   const minutesAmount = Math.floor(currentSeconds / 60);
   const secondsAmount = currentSeconds % 60;
@@ -122,15 +159,17 @@ export const Home = () => {
           <TaskInput
             id="task"
             placeholder="Dê um nome para o seu projeto"
+            disabled={!!activeCycle}
             {...register("task")}
           />
 
           <label htmlFor="minutesAmount">durante</label>
           <MinutesAmountInput
             id="minutesAmount"
+            disabled={!!activeCycle}
             type="number"
             placeholder="00"
-            min={5}
+            // min={5}
             max={60}
             {...register("minutesAmount", { valueAsNumber: true })}
           />
@@ -145,10 +184,17 @@ export const Home = () => {
           <span>{seconds[1]}</span>
         </CountDownContainer>
 
-        <StartCountDown disabled={isSubmitDisabled} type="submit">
-          <Play size={24} />
-          Começar
-        </StartCountDown>
+        {activeCycle ? (
+          <StopCountDown type="button" onClick={handleStopCycle}>
+            <HandPalm size={24} />
+            Interromper
+          </StopCountDown>
+        ) : (
+          <StartCountDown disabled={isSubmitDisabled} type="submit">
+            <Play size={24} />
+            Começar
+          </StartCountDown>
+        )}
       </form>
     </HomeContainer>
   );
