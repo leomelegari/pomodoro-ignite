@@ -1,7 +1,7 @@
 import { differenceInSeconds } from "date-fns";
 import { useContext, useEffect } from "react";
-import { CyclesContext } from "../..";
 import { CountDownContainer, Separator } from "./styles";
+import { CyclesContext } from "../../../../contexts/CiclesContext";
 
 export const Countdown = () => {
   const {
@@ -15,7 +15,7 @@ export const Countdown = () => {
   const totalSeconds = activeCycle ? activeCycle.minutesAmount * 60 : 0;
 
   useEffect(() => {
-    let interval: NodeJS.Timer;
+    let interval: ReturnType<typeof setTimeout>;
 
     if (activeCycle) {
       interval = setInterval(() => {
@@ -53,7 +53,6 @@ export const Countdown = () => {
   // padStart - função
   const minutes = String(minutesAmount).padStart(2, "0");
   const seconds = String(secondsAmount).padStart(2, "0");
-  console.log("seconds ", seconds);
 
   useEffect(() => {
     if (activeCycle) {
